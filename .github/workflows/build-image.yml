@@ -1,0 +1,80 @@
+name: Build and Push Docker Image to Docker Hub
+
+on:
+  push:
+    tags:
+    - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        osver: ["22.04", "20.04"]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      id: buildx
+      uses: docker/setup-buildx-action@v3
+
+#    - id: meta
+#      uses: docker/metadata-action@v4
+#      with:
+#        images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+#        flavor: |
+#          latest=false
+#          suffix=-${{ matrix.osver }}
+#        tags: |
+#          type=semver,pattern={{version}}
+#
+#    - name: Cache Docker layers
+#      uses: actions/cache@v4
+#      with:
+#        path: /tmp/.buildx-cache
+#        key: ${{ runner.os }}-buildx-${{ github.sha }}
+#        restore-keys: |
+#          ${{ runner.os }}-buildx-
+
+    - name: login to docker registry
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: build and push base image to registry
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile-${{ matrix.osver }}
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}-${{ matrix.osver }}-base
+        target: base
+        builder: ${{ steps.buildx.outputs.name }}
+        #cache-from: type=local,src=/tmp/.buildx-cache
+        #cache-to: type=local,dest=/tmp/.buildx-cache
+
+    - name: build and push essentials image to registry
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile-${{ matrix.osver }}
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}-${{ matrix.osver }}-essentials
+        target: essentials
+        builder: ${{ steps.buildx.outputs.name }}
+        #cache-from: type=local,src=/tmp/.buildx-cache
+        #cache-to: type=local,dest=/tmp/.buildx-cache
+
+    - name: build and push utils image to registry
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile-${{ matrix.osver }}
+        push: true
+        #tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}-${{ matrix.osver }}-utils
+        builder: ${{ steps.buildx.outputs.name }}
+        #cache-from: type=local,src=/tmp/.buildx-cache
+        #cache-to: type=local,dest=/tmp/.buildx-cache

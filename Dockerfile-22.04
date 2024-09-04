@@ -1,0 +1,160 @@
+# builder of pulseaudio
+FROM ubuntu:22.04 AS pulseaudiolib
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y build-essential dpkg-dev libpulse-dev git autoconf libtool sudo lsb-release && \
+    git clone https://github.com/neutrinolabs/pulseaudio-module-xrdp.git && \
+    cd pulseaudio-module-xrdp && \
+    scripts/install_pulseaudio_sources_apt.sh && \
+    ./bootstrap && ./configure PULSE_DIR=$HOME/pulseaudio.src && \
+    make
+
+# xrdp image
+FROM ubuntu:22.04 AS base
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt -y full-upgrade && apt install -y \
+    software-properties-common \
+    apt-utils \
+    ca-certificates \
+    lsb-release \
+    less \
+    crudini \
+    locales \
+    openssh-server \
+    pulseaudio \
+    sudo \
+    supervisor \
+    uuid-runtime \
+    vim \
+    wget \
+    curl \
+    xauth \
+    xautolock \
+    xfce4 \
+    xfce4-clipman-plugin \
+    xfce4-cpugraph-plugin \
+    xfce4-netload-plugin \
+    xfce4-screenshooter \
+    xfce4-taskmanager \
+    xfce4-terminal \
+    xfce4-xkb-plugin \
+    xorgxrdp \
+    xprintidle \
+    xrdp \
+    language-pack-zh-hans \
+    *wqy* \
+    fcitx-googlepinyin \
+    fcitx-sunpinyin \
+    bash-completion \
+    zsh \
+    zsh-syntax-highlighting && \
+    apt remove -y light-locker xscreensaver xfce4-screensaver && \
+    apt autoremove -y && \
+    rm -rf /var/cache/apt /var/lib/apt/lists
+
+COPY --from=pulseaudiolib /pulseaudio-module-xrdp/src/.libs/*.so /var/lib/xrdp-pulseaudio-installer/
+
+ADD rootfs /
+
+# Configure
+RUN mkdir /var/run/dbus && \
+    ln -s /bin/python3 /bin/python && \
+    cp /etc/X11/xrdp/xorg.conf /etc/X11 && \
+    sed -i '/^UMASK/s/022/077/' /etc/login.defs && \
+    sed -i '/PASS_MIN_LEN/s/.*/PASS_MIN_LEN 8/' /etc/login.defs && \
+    sed -i 's/console/anybody/g' /etc/X11/Xwrapper.config && \
+    sed -i 's/xrdp\/xorg/xorg/g' /etc/xrdp/sesman.ini && \
+    crudini --set /etc/xrdp/sesman.ini Chansrv FuseMountName .thinclient_drives && \
+    crudini --set /etc/supervisor/supervisord.conf supervisorctl serverurl unix:///var/run/supervisor.sock && \
+    crudini --del /etc/supervisor/supervisord.conf inet_http_server && \
+    echo "pulseaudio -D --enable-memfd=True" > /etc/skel/.Xsession && \
+    echo "xfce4-session" >> /etc/skel/.Xsession && \
+    locale-gen en_US.UTF-8 zh_CN.UTF-8 && \
+    rm -rf /etc/ssh/ssh_host_* && \
+    cp -r /etc/ssh /etc/ssh_orig && \
+    rm -rf /etc/xrdp/rsakeys.ini /etc/xrdp/*.pem
+
+# Docker config
+VOLUME ["/etc/ssh","/home"]
+EXPOSE 3389 22
+ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
+CMD ["supervisord"]
+
+FROM base AS essentials
+
+RUN wget -q "https://packages.mozilla.org/apt/repo-signing-key.gpg" -O /etc/apt/keyrings/packages.mozilla.org.asc && \
+    echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" > /etc/apt/sources.list.d/mozilla.list && \
+    echo "Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000" > /etc/apt/preferences.d/mozilla && \
+    wget -qO- "https://dl.google.com/linux/linux_signing_key.pub" | gpg --dearmor -o /etc/apt/keyrings/chrome-keyring.gpg && \
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt update && apt install -y \
+    vlc \
+    firefox \
+    google-chrome-stable \
+    openjdk-11-jdk \
+    telnet \
+    iputils-ping \
+    traceroute \
+    zip \
+    unzip \
+    dialog \
+    dnsutils \
+    fuse \
+    libfuse2 \
+    iproute2 \
+    iperf \
+    tmux \
+    tree \
+    lrzsz \
+    jq \
+    file \
+    git \
+    python3-venv \
+    python3-pip && \
+    apt autoremove -y && \
+    rm -rf /var/cache/apt /var/lib/apt/lists && \
+    sed -i '/Exec/s/$/ --disable-dev-shm-usage/' /usr/share/applications/google-chrome.desktop && \
+    mkdir /etc/skel/Desktop && \
+    cp /usr/share/applications/google-chrome.desktop /etc/skel/Desktop/ && \
+    cp /usr/share/applications/firefox.desktop /etc/skel/Desktop/ && \
+    chmod 755 /etc/skel/Desktop/* && \
+    git clone https://github.com/ohmyzsh/ohmyzsh.git /etc/skel/.oh-my-zsh
+
+FROM essentials AS utils
+
+RUN wget -q "https://www.postgresql.org/media/keys/ACCC4CF8.asc" -O /etc/apt/keyrings/apt.postgresql.org.asc && \
+    echo "deb [signed-by=/etc/apt/keyrings/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt update && apt install -y \
+    ansible \
+    golang \
+    nodejs \
+    kafkacat \
+    redis-tools \
+    libaio1 \
+    libtinfo5 \
+    postgresql-client-13 && \
+    mkdir /temp && cd /temp && \
+    curl -L "https://dbeaver.io/files/dbeaver-ce_latest_amd64.deb" -o dbeaver-ce.deb && \
+    curl -L "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64" -o vscode.deb && \
+    curl -L "https://cdn.mysql.com/archives/mysql-5.7/mysql-community-client_5.7.42-1ubuntu18.04_amd64.deb" -o mysql-clients.deb && \
+    apt install -y ./* && rm -f * && \
+    apt autoremove -y && \
+    rm -rf /var/cache/apt /var/lib/apt/lists && \
+    curl -L "https://dl.k8s.io/release/v1.21.2/bin/linux/amd64/kubectl" -o kubectl && \
+    curl -L "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2023-05-04T18-10-16Z" -o mc && \
+    curl -L "https://downloads.mongodb.com/compass/mongosh-1.2.3-linux-x64.tgz" | tar -zxf - --strip-components=2 && \
+    curl -L "https://download.docker.com/linux/static/stable/x86_64/docker-20.10.9.tgz" | tar -zxf - --strip-components=1 docker/docker && \
+    curl -L "https://github.com/derailed/k9s/releases/download/v0.32.5/k9s_Linux_amd64.tar.gz" | tar -zxf - k9s && \
+    curl -L "https://github.com/stern/stern/releases/download/v1.30.0/stern_1.30.0_linux_amd64.tar.gz" | tar -zxf - stern && \
+    curl -L "https://get.helm.sh/helm-v3.10.0-linux-amd64.tar.gz" | tar -zxf - --strip-components=1 linux-amd64/helm && \
+    chmod 755 * && mv * /usr/bin/ && \
+    curl -L "https://download.studio3t.com/studio-3t/linux/2022.2.0/studio-3t-linux-x64.tar.gz" | tar -zxf - && \
+    sh studio-3t-linux-x64.sh -q && \
+    curl -L "https://www.kafkatool.com/download3/offsetexplorer.sh" -O && \
+    sh offsetexplorer.sh -q && \
+    curl -L "https://dl.pstmn.io/download/latest/linux64" | tar -zxf - -C /opt/ && \
+    echo "[Desktop Entry]\nName=Postman API Tool\nGenericName=Postman\nComment=Testing API\nExec=/opt/Postman/Postman\nTerminal=false\nX-MultipleArgs=false\nType=Application\nIcon=/opt/Postman/app/resources/app/assets/icon.png\nStartupWMClass=Postman\nStartupNotify=true" > /opt/Postman/Postman.desktop && \
+    rm -rf /temp && \
+    cp /usr/share/applications/code.desktop /etc/skel/Desktop/ && \
+    cp /usr/share/applications/dbeaver-ce.desktop /etc/skel/Desktop/ && \
+    cp /opt/*/*.desktop /etc/skel/Desktop/ && \
+    chmod 755 /etc/skel/Desktop/*.desktop

@@ -1,0 +1,22 @@
+#!/bin/bash
+
+username=${1:--}
+groups=${2:-${DEFAULT_USER_GROUP:-common}}
+
+if [ -f /etc/users.pass ]
+then
+    hashed_password=`cat /etc/users.pass`
+else
+    hashed_password=`openssl passwd -6 $(tr -dc 'A-Za-z0-9_!@#$%^&*()' < /dev/urandom | head -c 16)`
+fi
+
+if [ -d /home/$username ]
+then
+    uid=$(stat -c %u /home/$username)
+    useradd_opts="-u $uid"
+else
+    useradd_opts="-m"
+fi
+
+useradd_opts="$useradd_opts -G $groups -p $hashed_password $username"
+useradd $useradd_opts && stat -c "uname: %U, gname: %G, home: %n" /home/$username

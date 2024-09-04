@@ -1,0 +1,49 @@
+version: '3.5'
+services:
+  xrdp:
+    image: alvinleee/ubuntu-xrdp-desktop:v1-22.04-utils
+    container_name: ubuntu-xrdp-desktop
+    hostname: ubuntu-xrdp-desktop
+    restart: always
+    shm_size: 1g
+    ulimits:
+      core: 0
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      LANG: zh_CN.UTF-8
+      AUTO_CREATE_SSH_USER: true           # 启用自动创建不存在用户的脚本
+      #SSH_TRUSTED_IPS: 127.0.0.1 ::1       # 自动创建用户时的可信源IP
+      #XRDP_ALLOW_ROOT_LOGIN: false         # 禁用 root 图形登录
+      DEFAULT_UMASK: "027"
+      # 使用 adddyuser 命令创建用户时设置的默认密码（ChangeMe），否则设置随机密码
+      #DEFAULT_USER_PASSWORD: "$$6$$Fue.F9HIwYE7Le3j$$RskBpnzz5Pgy55NNHqenHhBFaDhpDh9uOP/ChVGm7jgw4NT2d4DRV0xseakidTv27UtjWaNSMEnUs0NQ.OUYF/"
+      #DEFAULT_USER_SHELL: /bin/zsh
+      #DEFAULT_USER_GROUP: common
+      SUDO_NOPASSWD: true
+      #SUDO_DEFAULT_CMD: /bin/whoami
+      AUTO_KILL_INACTIVE_USER: true        # 启用用户离线杀进程的脚本
+      #XRDP_DISC_TIME_LIMIT: 5
+      #APT_MIRROR_URL: https://mirrors.ustc.edu.cn/ubuntu/
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 256M
+    ports:
+      - "3389:3389"
+      - "2222:22"
+    volumes:
+      - /etc/localtime:/etc/localtime
+      #- ssh:/etc/ssh/
+      #- home/:/home/
+      #- bin:/usr/local/bin/
+      #- ./test/id_rsa.pub:/etc/ssh_orig/authorized_keys
+      #- ./test/users.pass:/etc/users.pass
+      #- ./test/users.list:/etc/users.list
+
+#volumes:
+#  ssh:
+#  home:
+#  bin:

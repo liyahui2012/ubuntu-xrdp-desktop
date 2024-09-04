@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu-xrdp-desktop
+  labels:
+    name: ubuntu-xrdp-desktop
+spec:
+  containers:
+  - name: ubuntu-xrdp-desktop
+    image: alvinleee/ubuntu-xrdp-desktop:v0.0.1-22.04-utils
+    imagePullPolicy: IfNotPresent
+    resources:
+      limits:
+        memory: "2Gi"
+      requests:
+        memory: "256Mi"
+    securityContext:
+      capabilities:
+        add:
+          - SYS_ADMIN
+    env:
+    - name: LANG
+      value: zh_CN.UTF-8
+    - name: AUTO_KILL_INACTIVE_USER
+      value: "true"
+    - name: AUTO_CREATE_SSH_USER
+      value: "true"
+    - name: DEFAULT_UMASK
+      value: "027"
+    - name: SUDO_NOPASSWD
+      value: "true"
+    ports:
+    - containerPort: 3389
+      name: rdp
+      hostPort: 3389
+    - containerPort: 22
+      name: ssh
+      hostPort: 2222
+    volumeMounts:
+    - name: localtime
+      mountPath: /etc/localtime
+  volumes:
+  - name: localtime
+    hostPath:
+      path: /etc/localtime
